@@ -1,0 +1,6 @@
+{
+  "name": "SWP",
+  "description": "Student Webpage Project Viewer - in-browser HTML/CSS projects.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
