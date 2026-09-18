@@ -119,8 +119,12 @@ export const CreatePortfolioTile: React.FC<CreatePortfolioTileProps> = ({
       ]);
 
       if (profileError) {
-        console.warn('Profile insert note:', profileError.message);
+        setError(`Your account was created, but something went wrong saving your nickname (${profileError.message}). Please contact your teacher — your login will work, but you won't appear in the directory yet.`);
+        setLoading(false);
+      return;
       }
+
+setCreatedSuccess(true);
 
       // Show success feedback
       setCreatedSuccess(true);
@@ -154,7 +158,7 @@ export const CreatePortfolioTile: React.FC<CreatePortfolioTileProps> = ({
             setTakenNickname(null);
             setIsExpanded(true);
           }}
-          className="p-6 h-full flex flex-col items-center justify-center text-center min-h-[148px]"
+          className="p-6 h-full flex flex-col items-center justify-center text-center min-h-[148px] group"
         >
           <div className="w-11 h-11 rounded-2xl bg-[#3e29bd] text-white flex items-center justify-center mb-3 shadow-sm group-hover:scale-105 transition-transform">
             <Plus className="w-6 h-6 stroke-[2.5]" />

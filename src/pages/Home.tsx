@@ -147,8 +147,8 @@ export const Home: React.FC<HomeProps> = ({
 
   // Filter profiles by nickname
   const filteredProfiles = profiles.filter(p =>
-    p.nickname.toLowerCase().includes(searchQuery.toLowerCase().trim())
-  );
+  p.nickname.toLowerCase().includes(searchQuery.toLowerCase().trim())
+);
 
   /* ------------------------------------------------------------- */
   /*                      LOGGED IN STATE                          */
@@ -158,7 +158,7 @@ export const Home: React.FC<HomeProps> = ({
       <div className="min-h-screen bg-[#f8f7fc] flex flex-col">
         {/* Top Navigation Bar */}
         <header className="sticky top-0 z-30 bg-white/90 backdrop-blur-md border-b border-[#e3e0f5]">
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-18 flex items-center justify-between">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex items-center justify-between">
             <div className="flex items-center gap-3">
               <SwpLogo size="md" />
               <div>
@@ -385,11 +385,10 @@ export const Home: React.FC<HomeProps> = ({
         {/* Search Bar & Stats */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div className="w-full sm:max-w-md">
-            <SearchBar
-              value={searchQuery}
-              onChange={setSearchQuery}
-              placeholder="Search by student nickname..."
-            />
+            <SearchBar value={searchQuery} 
+              onChange={setSearchQuery} 
+              count={filteredProfiles.length} 
+              totalCount={profiles.length} />
           </div>
 
           <div className="flex items-center gap-3 self-end sm:self-auto">
