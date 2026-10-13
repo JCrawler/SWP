@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
+import { Footer } from '../components/Footer';
 import { supabase } from '../supabaseClient';
 import { Profile, Portfolio } from '../types';
 import { SearchBar } from '../components/SearchBar';
@@ -327,6 +328,7 @@ export const Home: React.FC<HomeProps> = ({
             </div>
           )}
         </main>
+        <Footer />
       </div>
     );
   }
@@ -450,7 +452,8 @@ export const Home: React.FC<HomeProps> = ({
           )}
         </div>
       </main>
-      </div>
+      <Footer />
+    </div>
   );
 };
 
