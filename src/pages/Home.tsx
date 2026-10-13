@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { supabase, SUPABASE_SCHEMA_SQL } from '../supabaseClient';
+import { supabase } from '../supabaseClient';
 import { Profile, Portfolio } from '../types';
 import { SearchBar } from '../components/SearchBar';
 import { NicknameCard } from '../components/NicknameCard';
@@ -9,9 +9,6 @@ import { SwpLogo } from '../components/SwpLogo';
 import {
   LogOut,
   Plus,
-  Database,
-  Check,
-  Copy,
   FolderCode,
   ShieldCheck,
   RefreshCw,
@@ -51,10 +48,6 @@ export const Home: React.FC<HomeProps> = ({
     type: 'success' | 'error' | 'info';
     message: string;
   } | null>(null);
-
-  // SQL Schema Modal State
-  const [showSqlModal, setShowSqlModal] = useState(false);
-  const [copiedSql, setCopiedSql] = useState(false);
 
   // Fetch registered student profiles (logged-out directory)
   const fetchProfiles = useCallback(async () => {
@@ -137,12 +130,6 @@ export const Home: React.FC<HomeProps> = ({
         message: err?.message || 'Failed to delete portfolio due to network issue.',
       });
     }
-  };
-
-  const handleCopySql = () => {
-    navigator.clipboard.writeText(SUPABASE_SCHEMA_SQL);
-    setCopiedSql(true);
-    setTimeout(() => setCopiedSql(false), 2000);
   };
 
   // Filter profiles by nickname
@@ -364,18 +351,6 @@ export const Home: React.FC<HomeProps> = ({
                 </p>
               </div>
             </div>
-
-            <div className="flex items-center gap-2 self-start sm:self-auto">
-              <button
-                type="button"
-                onClick={() => setShowSqlModal(true)}
-                className="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-medium text-[#6b6580] hover:text-[#3e29bd] bg-[#f8f7fc] hover:bg-[#eeeafd] border border-[#e3e0f5] rounded-xl transition-colors"
-                title="View Supabase Schema & SQL"
-              >
-                <Database className="w-3.5 h-3.5" />
-                <span>Supabase Schema</span>
-              </button>
-            </div>
           </div>
         </div>
       </header>
@@ -475,74 +450,8 @@ export const Home: React.FC<HomeProps> = ({
           )}
         </div>
       </main>
-
-      {/* Supabase Schema Modal */}
-      {showSqlModal && (
-        <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white border border-[#e3e0f5] rounded-3xl max-w-2xl w-full max-h-[85vh] flex flex-col shadow-2xl overflow-hidden animate-fadeIn">
-            <div className="px-6 py-5 border-b border-[#e3e0f5] flex items-center justify-between">
-              <div className="flex items-center gap-2.5">
-                <div className="w-8 h-8 rounded-xl bg-[#eeeafd] text-[#3e29bd] flex items-center justify-center">
-                  <Database className="w-4 h-4" />
-                </div>
-                <div>
-                  <h3 className="font-bold text-[#1e1b2e] text-base">
-                    Supabase PostgreSQL Schema &amp; RLS Policies
-                  </h3>
-                  <p className="text-xs text-[#6b6580]">
-                    Run this once in your Supabase SQL Editor to configure tables &amp; auth
-                  </p>
-                </div>
-              </div>
-
-              <button
-                type="button"
-                onClick={() => setShowSqlModal(false)}
-                className="text-[#6b6580] hover:text-[#1e1b2e] p-1 rounded-lg"
-              >
-                &times;
-              </button>
-            </div>
-
-            <div className="p-6 overflow-y-auto flex-1 bg-[#1e1b2e] text-slate-100 font-mono text-xs leading-relaxed">
-              <pre>{SUPABASE_SCHEMA_SQL}</pre>
-            </div>
-
-            <div className="px-6 py-4 bg-[#f8f7fc] border-t border-[#e3e0f5] flex items-center justify-between">
-              <span className="text-xs text-[#6b6580]">
-                Profiles are public; portfolios require <code>auth.uid() = owner_id</code>
-              </span>
-
-              <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={handleCopySql}
-                  className="inline-flex items-center gap-1.5 px-4 py-2 bg-[#3e29bd] hover:bg-[#331f9e] text-white text-xs font-semibold rounded-xl transition-colors shadow-sm"
-                >
-                  {copiedSql ? (
-                    <>
-                      <Check className="w-4 h-4 text-emerald-300" />
-                      <span>Copied!</span>
-                    </>
-                  ) : (
-                    <>
-                      <Copy className="w-4 h-4" />
-                      <span>Copy SQL</span>
-                    </>
-                  )}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setShowSqlModal(false)}
-                  className="px-4 py-2 text-xs font-medium text-[#6b6580] hover:text-[#1e1b2e] hover:bg-white rounded-xl border border-transparent hover:border-[#e3e0f5] transition-colors"
-                >
-                  Close
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-    </div>
+      </div>
   );
 };
+
+      

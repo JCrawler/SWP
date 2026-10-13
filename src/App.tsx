@@ -3,6 +3,7 @@ import { useAuth } from './hooks/useAuth';
 import { Home } from './pages/Home';
 import { PortfolioEditor } from './pages/PortfolioEditor';
 import { Loader2 } from 'lucide-react';
+import { isRealSupabase } from './supabaseClient';
 
 export default function App() {
   const { user, loading, signOut, refreshProfile } = useAuth();
@@ -26,6 +27,20 @@ export default function App() {
     setCurrentPath(route);
   }, []);
 
+    // In production, never silently use the fake in-browser database
+  if (import.meta.env.PROD && !isRealSupabase) {
+    return (
+      <div className="min-h-screen bg-[#f8f7fc] flex items-center justify-center p-4">
+        <div className="bg-white border border-[#fecaca] rounded-2xl p-8 max-w-md text-center">
+          <h1 className="text-lg font-bold text-[#1e1b2e] mb-2">Database not connected</h1>
+          <p className="text-sm text-[#6b6580]">
+            This site was built without its Supabase settings, so it cannot save anything.
+            Please tell the site owner.
+          </p>
+        </div>
+      </div>
+    );
+  }
   // If loading session initially
   if (loading) {
     return (

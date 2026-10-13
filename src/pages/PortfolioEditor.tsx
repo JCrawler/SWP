@@ -196,7 +196,7 @@ export const PortfolioEditor: React.FC<PortfolioEditorProps> = ({
         setTimeout(() => setSaveSuccessNotice(null), 5000);
       } else {
         // Update existing portfolio
-        const { error: updateError } = await supabase
+        const { data: updatedRows, error: updateError } = await supabase
           .from('portfolios')
           .update({
             title: portfolioTitle,
@@ -204,10 +204,15 @@ export const PortfolioEditor: React.FC<PortfolioEditorProps> = ({
             css_code: cssCode,
             updated_at: new Date().toISOString(),
           })
-          .eq('id', currentPortfolioId);
+          .eq('id', currentPortfolioId).select('id');
 
         if (updateError) {
           setErrorNotice(`Update failed: ${updateError.message}`);
+          setSaving(false);
+          return;
+        }
+                if (!updatedRows || updatedRows.length === 0) {
+          setErrorNotice('Nothing was saved. Your login may have expired. Please log out and log in again.');
           setSaving(false);
           return;
         }
