@@ -171,6 +171,7 @@ export const Home: React.FC<HomeProps> = ({
 
   // Handle Login Onboarding
 // Handle Login Onboarding
+ // Handle Login Onboarding
   const handleLoginSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setAuthError(null);
@@ -183,9 +184,12 @@ export const Home: React.FC<HomeProps> = ({
 
     setAuthLoading(true);
     try {
-      const email = cleanNick.includes('@') ? cleanNick : `${cleanNick}@swp.local`;
+      // Explicitly check for admin login versus student login
+      let email = `${cleanNick}@swp.local`;
+      if (cleanNick === 'admin') {
+        email = 'admin@swp.local';
+      }
 
-      // 'await' requires the outer function to be marked 'async'
       const { error } = await supabase.auth.signInWithPassword({
         email,
         password: loginPassword,
