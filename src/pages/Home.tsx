@@ -170,7 +170,7 @@ export const Home: React.FC<HomeProps> = ({
   }, [user, isAdmin, mustChangePassword, fetchProfilesForAdmin, fetchMyPortfolios]);
 
   // Handle Login Onboarding
-/// Handle Login Onboarding via Direct Database Verification
+// Handle Login Onboarding with Real Session Cookie
   const handleLoginSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setAuthError(null);
@@ -183,7 +183,7 @@ export const Home: React.FC<HomeProps> = ({
 
     setAuthLoading(true);
     try {
-      // Call our custom PostgreSQL function to verify the nickname & password
+      // 1. Verify credentials via the custom database RPC function first
       const { data, error } = await supabase.rpc('login_with_nickname', {
         p_nickname: cleanNick,
         p_password: loginPassword,
@@ -195,11 +195,23 @@ export const Home: React.FC<HomeProps> = ({
         return;
       }
 
-      // If successful, trigger session sync or reload to let useAuth pick up the session
+      // 2. Establish the official browser session with Supabase Auth
+      const targetEmail = cleanNick === 'admin' ? 'admin@swp.local' : `${cleanNick}@swp.local`;
+      const { error: sessionError } = await supabase.auth.signInWithPassword({
+        email: targetEmail,
+        password: loginPassword,
+      });
+
+      if (sessionError) {
+        setAuthError('Authenticated, but failed to start session: ' + sessionError.message);
+        setAuthLoading(false);
+        return;
+      }
+
       setLoginNickname('');
       setLoginPassword('');
       onAuthSuccess();
-      window.location.reload(); // Ensures clean session refresh across the app
+      window.location.reload(); // Reloads with an active session token
     } catch (err: any) {
       setAuthError(err?.message || 'Sign in failed. Please check your connection.');
     } finally {
