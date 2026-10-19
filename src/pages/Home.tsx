@@ -171,7 +171,6 @@ export const Home: React.FC<HomeProps> = ({
 
   // Handle Login Onboarding
 // Handle Login Onboarding
- // Handle Login Onboarding
   const handleLoginSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setAuthError(null);
@@ -184,19 +183,31 @@ export const Home: React.FC<HomeProps> = ({
 
     setAuthLoading(true);
     try {
-      // Explicitly check for admin login versus student login
-      let email = `${cleanNick}@swp.local`;
-      if (cleanNick === 'admin') {
-        email = 'admin@swp.local';
+      // 1. Look up the user's real email from the public.profiles table using their nickname
+      const { data: profileData, error: profileError } = await supabase
+        .from('profiles')
+        .select('id, nickname')
+        .eq('nickname', cleanNick)
+        .maybeSingle();
+
+      if (profileError || !profileData) {
+        setAuthError('Account not found with that nickname.');
+        setAuthLoading(false);
+        return;
       }
 
-      const { error } = await supabase.auth.signInWithPassword({
-        email,
+      // 2. Map nickname to its corresponding auth email
+      const targetEmail = cleanNick === 'admin' ? 'admin@swp.local' : `${cleanNick}@swp.local`;
+
+      // 3. Authenticate with Supabase Auth
+      const { error: authError } = await supabase.auth.signInWithPassword({
+        email: targetEmail,
         password: loginPassword,
       });
 
-      if (error) {
-        setAuthError('Invalid username or password. Please try again.');
+      if (authError) {
+        setAuthError('Invalid password. Please try again.');
+        setAuthLoading(false);
         return;
       }
 
@@ -209,7 +220,6 @@ export const Home: React.FC<HomeProps> = ({
       setAuthLoading(false);
     }
   };
-
   // Handle Student Changing Temporary Password
   const handlePasswordChangeSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
