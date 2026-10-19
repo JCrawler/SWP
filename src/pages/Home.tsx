@@ -170,7 +170,6 @@ export const Home: React.FC<HomeProps> = ({
   }, [user, isAdmin, mustChangePassword, fetchProfilesForAdmin, fetchMyPortfolios]);
 
   // Handle Login Onboarding
-// Handle Login Onboarding with Real Session Cookie
   const handleLoginSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setAuthError(null);
@@ -183,35 +182,21 @@ export const Home: React.FC<HomeProps> = ({
 
     setAuthLoading(true);
     try {
-      // 1. Verify credentials via the custom database RPC function first
-      const { data, error } = await supabase.rpc('login_with_nickname', {
-        p_nickname: cleanNick,
-        p_password: loginPassword,
-      });
+      const email = cleanNick === 'admin' ? 'admin@swp.local' : `${cleanNick}@swp.local`;
 
-      if (error || !data || data.length === 0) {
-        setAuthError('Invalid username or password. Please try again.');
-        setAuthLoading(false);
-        return;
-      }
-
-      // 2. Establish the official browser session with Supabase Auth
-      const targetEmail = cleanNick === 'admin' ? 'admin@swp.local' : `${cleanNick}@swp.local`;
-      const { error: sessionError } = await supabase.auth.signInWithPassword({
-        email: targetEmail,
+      const { error } = await supabase.auth.signInWithPassword({
+        email,
         password: loginPassword,
       });
 
-      if (sessionError) {
-        setAuthError('Authenticated, but failed to start session: ' + sessionError.message);
-        setAuthLoading(false);
+      if (error) {
+        setAuthError('Invalid username or password. Please try again.');
         return;
       }
 
       setLoginNickname('');
       setLoginPassword('');
       onAuthSuccess();
-      window.location.reload(); // Reloads with an active session token
     } catch (err: any) {
       setAuthError(err?.message || 'Sign in failed. Please check your connection.');
     } finally {
