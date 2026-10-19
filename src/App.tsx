@@ -2,14 +2,43 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { useAuth } from './hooks/useAuth';
 import { Home } from './pages/Home';
 import { PortfolioEditor } from './pages/PortfolioEditor';
-import { Loader2 } from 'lucide-react';
-import { isRealSupabase } from './supabaseClient';
+import { AdminDashboard } from './pages/AdminDashboard';
+import { Loader2, LogOut, SwatchBook } from 'lucide-react';
+import { isRealSupabase, supabase } from './supabaseClient';
+import { SwpLogo } from './components/SwpLogo';
 
 export default function App() {
   const { user, loading, signOut, refreshProfile } = useAuth();
   const [currentPath, setCurrentPath] = useState<string>(() => {
     return window.location.pathname || '/';
   });
+
+  // Track if user has admin privileges
+  const [isAdmin, setIsAdmin] = useState(false);
+
+  useEffect(() => {
+    const checkAdminRole = async () => {
+      if (!user) {
+        setIsAdmin(false);
+        return;
+      }
+      if (user.nickname.toLowerCase() === 'admin') {
+        setIsAdmin(true);
+        return;
+      }
+      try {
+        const { data } = await supabase
+          .from('profiles')
+          .select('role')
+          .eq('id', user.id)
+          .single();
+        setIsAdmin((data as any)?.role === 'admin');
+      } catch {
+        setIsAdmin(false);
+      }
+    };
+    checkAdminRole();
+  }, [user]);
 
   // Keep state in sync with browser forward/back buttons
   useEffect(() => {
@@ -27,20 +56,21 @@ export default function App() {
     setCurrentPath(route);
   }, []);
 
-    // In production, never silently use the fake in-browser database
+  // In production, never silently use the fake in-browser database
   if (import.meta.env.PROD && !isRealSupabase) {
     return (
       <div className="min-h-screen bg-[#f8f7fc] flex items-center justify-center p-4">
-        <div className="bg-white border border-[#fecaca] rounded-2xl p-8 max-w-md text-center">
+        <div className="bg-white border border-[#fecaca] rounded-2xl p-8 max-w-md text-center shadow-sm">
           <h1 className="text-lg font-bold text-[#1e1b2e] mb-2">Database not connected</h1>
           <p className="text-sm text-[#6b6580]">
             This site was built without its Supabase settings, so it cannot save anything.
-            Please tell the site owner.
+            Please check your environment variables.
           </p>
         </div>
       </div>
     );
   }
+
   // If loading session initially
   if (loading) {
     return (
@@ -53,8 +83,45 @@ export default function App() {
     );
   }
 
-  // Parse path for editor route
-  // e.g. /portfolio/new or /portfolio/:id
+  // Handle Admin Dashboard Route (/admin)
+  if (currentPath === '/admin') {
+    if (!user || !isAdmin) {
+      // If not logged in as admin, redirect to root login screen
+      navigate('/');
+      return null;
+    }
+
+    return (
+      <div className="min-h-screen bg-[#f8f7fc] flex flex-col">
+        <header className="bg-white border-b border-[#e3e0f5] px-6 py-3.5 flex justify-between items-center shadow-xs">
+          <div className="flex items-center gap-3">
+            <SwpLogo size="sm" />
+            <span className="font-bold text-sm text-[#1e1b2e]">SWP Teacher Administration</span>
+          </div>
+          <div className="flex items-center gap-3">
+            <button
+              onClick={() => navigate('/')}
+              className="text-xs font-semibold text-[#3e29bd] hover:underline"
+            >
+              ← Back to Folders
+            </button>
+            <button
+              onClick={signOut}
+              className="flex items-center gap-1.5 text-xs text-[#dc2626] bg-[#fef2f2] px-3 py-1.5 rounded-xl border border-[#fecaca] font-semibold"
+            >
+              <LogOut className="w-3.5 h-3.5" />
+              <span>Log Out</span>
+            </button>
+          </div>
+        </header>
+        <div className="flex-1">
+          <AdminDashboard />
+        </div>
+      </div>
+    );
+  }
+
+  // Parse path for editor route (e.g. /portfolio/new or /portfolio/:id)
   const portfolioMatch = currentPath.match(/^\/portfolio\/(.+)$/);
   const isEditorRoute = Boolean(portfolioMatch);
   const portfolioId = portfolioMatch ? portfolioMatch[1] : null;
@@ -62,7 +129,7 @@ export default function App() {
   // Protect editor route: if not logged in, force to Home "/"
   if (isEditorRoute) {
     if (!user) {
-      // Redirect to home
+      navigate('/');
       return (
         <Home
           user={null}
@@ -82,7 +149,7 @@ export default function App() {
     );
   }
 
-  // Default: Home ("/")
+  // Default: Home ("/") — Handles Login, Password Reset, and Student Folder views
   return (
     <Home
       user={user}

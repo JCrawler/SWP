@@ -1,7 +1,6 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { supabase } from '../supabaseClient';
 import { CodeEditorPane } from '../components/CodeEditorPane';
-import { LivePreview } from '../components/LivePreview';
 import { OutputCodeToggle } from '../components/OutputCodeToggle';
 import { SwpLogo } from '../components/SwpLogo';
 import {
@@ -11,19 +10,55 @@ import {
   AlertTriangle,
   Loader2,
   CheckCircle2,
-  Clock,
   RotateCcw,
-  Sparkles,
   Check,
   AlertCircle,
   X,
 } from 'lucide-react';
 
 interface PortfolioEditorProps {
-  portfolioId: string | null; // 'new' or UUID
+  portfolioId: string | null;
   user: { id: string; email: string; nickname: string } | null;
   onNavigate: (route: string) => void;
 }
+
+interface PreviewProps {
+  html: string;
+  css: string;
+}
+
+export const PortfolioPreview: React.FC<PreviewProps> = ({ html, css }) => {
+  const fullDocument = `
+    <!DOCTYPE html>
+    <html lang="en">
+      <head>
+        <meta charset="UTF-8" />
+        <base target="_blank" />
+        <style>${css}</style>
+      </head>
+      <body>
+        ${html}
+      </body>
+    </html>
+  `;
+
+  return (
+    <div className="w-full h-full flex flex-col bg-white rounded-xl border border-[#e3e0f5] overflow-hidden shadow-sm">
+      <div className="h-9 bg-[#fbfafd] border-b border-[#e3e0f5] px-3 flex items-center justify-between text-xs text-[#6b6580]">
+        <span className="font-semibold text-[#1e1b2e]">Live Output</span>
+        <span className="text-[10px] bg-[#eeeafd] text-[#3e29bd] px-2 py-0.5 rounded-full font-medium">
+          Sandbox
+        </span>
+      </div>
+      <iframe
+        title="Live Preview"
+        srcDoc={fullDocument}
+        sandbox="allow-scripts allow-forms allow-popups allow-modals"
+        className="w-full flex-1 border-none bg-white"
+      />
+    </div>
+  );
+};
 
 export const PortfolioEditor: React.FC<PortfolioEditorProps> = ({
   portfolioId: initialPortfolioId,
@@ -34,10 +69,9 @@ export const PortfolioEditor: React.FC<PortfolioEditorProps> = ({
   const isNew = !currentPortfolioId || currentPortfolioId === 'new';
 
   const [title, setTitle] = useState(isNew ? 'webpage project' : '');
-  const [htmlCode, setHtmlCode] = useState(isNew ? '' : '');
-  const [cssCode, setCssCode] = useState(isNew ? '' : '');
+  const [htmlCode, setHtmlCode] = useState('');
+  const [cssCode, setCssCode] = useState('');
 
-  // Snapshot of last saved state to detect unsaved changes
   const [lastSavedSnapshot, setLastSavedSnapshot] = useState<{
     title: string;
     htmlCode: string;
@@ -48,14 +82,11 @@ export const PortfolioEditor: React.FC<PortfolioEditorProps> = ({
     cssCode: '',
   });
 
-  // Debounced code for live preview (~300ms)
   const [debouncedHtml, setDebouncedHtml] = useState(htmlCode);
   const [debouncedCss, setDebouncedCss] = useState(cssCode);
 
-  // View toggle for screens below lg breakpoint
   const [activeTab, setActiveTab] = useState<'output' | 'code'>('code');
 
-  // Async states & feedback
   const [loading, setLoading] = useState(!isNew);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
@@ -64,7 +95,6 @@ export const PortfolioEditor: React.FC<PortfolioEditorProps> = ({
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [deleting, setDeleting] = useState(false);
 
-  // Check if current editor content differs from saved snapshot
   const hasUnsavedChanges = useMemo(() => {
     return (
       title !== lastSavedSnapshot.title ||
@@ -73,7 +103,6 @@ export const PortfolioEditor: React.FC<PortfolioEditorProps> = ({
     );
   }, [title, htmlCode, cssCode, lastSavedSnapshot]);
 
-  // Debounce live preview updates
   useEffect(() => {
     const timer = setTimeout(() => {
       setDebouncedHtml(htmlCode);
@@ -83,7 +112,6 @@ export const PortfolioEditor: React.FC<PortfolioEditorProps> = ({
     return () => clearTimeout(timer);
   }, [htmlCode, cssCode]);
 
-  // Load existing portfolio from Supabase if editing
   const loadPortfolio = useCallback(async (id: string) => {
     if (!user) return;
     setLoading(true);
@@ -98,9 +126,7 @@ export const PortfolioEditor: React.FC<PortfolioEditorProps> = ({
         .single();
 
       if (fetchError) {
-        setLoadError(
-          fetchError.message || 'Unable to load this portfolio from the database.'
-        );
+        setLoadError(fetchError.message || 'Unable to load this portfolio from the database.');
         return;
       }
 
@@ -110,8 +136,8 @@ export const PortfolioEditor: React.FC<PortfolioEditorProps> = ({
       }
 
       const loadedTitle = data.title || 'Untitled Portfolio';
-      const loadedHtml = data.html_code ?? '';
-      const loadedCss = data.css_code ?? '';
+      const loadedHtml = data.html_code ?? data.html ?? '';
+      const loadedCss = data.css_code ?? data.css ?? '';
 
       setTitle(loadedTitle);
       setHtmlCode(loadedHtml);
@@ -144,8 +170,7 @@ export const PortfolioEditor: React.FC<PortfolioEditorProps> = ({
     }
   }, [currentPortfolioId, user, onNavigate, loadPortfolio]);
 
-  // Handle Save
-  const handleSave = async () => {
+  const handleSave = useCallback(async () => {
     if (!user) {
       setErrorNotice('You must be logged in to save portfolios.');
       return;
@@ -159,7 +184,6 @@ export const PortfolioEditor: React.FC<PortfolioEditorProps> = ({
 
     try {
       if (isNew) {
-        // Create new portfolio
         const { data, error: insertError } = await supabase
           .from('portfolios')
           .insert([
@@ -195,7 +219,6 @@ export const PortfolioEditor: React.FC<PortfolioEditorProps> = ({
         setSaveSuccessNotice(`Portfolio created and saved successfully at ${timeStr}!`);
         setTimeout(() => setSaveSuccessNotice(null), 5000);
       } else {
-        // Update existing portfolio
         const { data: updatedRows, error: updateError } = await supabase
           .from('portfolios')
           .update({
@@ -204,14 +227,16 @@ export const PortfolioEditor: React.FC<PortfolioEditorProps> = ({
             css_code: cssCode,
             updated_at: new Date().toISOString(),
           })
-          .eq('id', currentPortfolioId).select('id');
+          .eq('id', currentPortfolioId)
+          .select('id');
 
         if (updateError) {
           setErrorNotice(`Update failed: ${updateError.message}`);
           setSaving(false);
           return;
         }
-                if (!updatedRows || updatedRows.length === 0) {
+
+        if (!updatedRows || updatedRows.length === 0) {
           setErrorNotice('Nothing was saved. Your login may have expired. Please log out and log in again.');
           setSaving(false);
           return;
@@ -232,9 +257,8 @@ export const PortfolioEditor: React.FC<PortfolioEditorProps> = ({
     } finally {
       setSaving(false);
     }
-  };
+  }, [user, title, isNew, htmlCode, cssCode, currentPortfolioId]);
 
-  // Keyboard shortcut: Ctrl+S / Cmd+S to save
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if ((e.ctrlKey || e.metaKey) && e.key === 's') {
@@ -244,9 +268,8 @@ export const PortfolioEditor: React.FC<PortfolioEditorProps> = ({
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  });
+  }, [handleSave]);
 
-  // Handle Delete
   const handleDelete = async () => {
     if (!currentPortfolioId || isNew) return;
     setDeleting(true);
@@ -277,7 +300,6 @@ export const PortfolioEditor: React.FC<PortfolioEditorProps> = ({
     return null;
   }
 
-  // Loading state
   if (loading) {
     return (
       <div className="min-h-screen bg-[#f8f7fc] flex items-center justify-center p-4">
@@ -294,7 +316,6 @@ export const PortfolioEditor: React.FC<PortfolioEditorProps> = ({
     );
   }
 
-  // Load failure state with recovery actions
   if (loadError) {
     return (
       <div className="min-h-screen bg-[#f8f7fc] flex items-center justify-center p-4">
@@ -335,7 +356,6 @@ export const PortfolioEditor: React.FC<PortfolioEditorProps> = ({
 
   return (
     <div className="h-screen flex flex-col bg-[#f8f7fc] overflow-hidden">
-      {/* Top Navigation & Action Bar */}
       <header className="h-16 bg-white border-b border-[#e3e0f5] px-3 sm:px-6 flex items-center justify-between shrink-0 z-20">
         <div className="flex items-center gap-2 sm:gap-3 min-w-0 flex-1">
           <button
@@ -356,7 +376,6 @@ export const PortfolioEditor: React.FC<PortfolioEditorProps> = ({
             </div>
           </div>
 
-          {/* Portfolio Title Input */}
           <div className="flex items-center gap-2 flex-1 max-w-sm sm:max-w-md">
             <input
               id="portfolio-title-input"
@@ -368,7 +387,6 @@ export const PortfolioEditor: React.FC<PortfolioEditorProps> = ({
             />
           </div>
 
-          {/* Unsaved Changes Status Badge */}
           <div className="hidden md:flex items-center gap-1.5 text-[11px] font-medium px-2.5 py-1 rounded-full border">
             {saving ? (
               <span className="flex items-center gap-1.5 text-[#3e29bd] border-[#eeeafd] bg-[#eeeafd]/50">
@@ -389,14 +407,11 @@ export const PortfolioEditor: React.FC<PortfolioEditorProps> = ({
           </div>
         </div>
 
-        {/* Action Buttons & Responsive Controls */}
         <div className="flex items-center gap-2 sm:gap-3 shrink-0">
-          {/* Mobile Tab Switcher */}
           <div className="lg:hidden">
             <OutputCodeToggle activeView={activeTab} onChange={setActiveTab} />
           </div>
 
-          {/* Delete Button (existing only) */}
           {!isNew && (
             confirmDelete ? (
               <div className="flex items-center gap-1 bg-[#fef2f2] p-1 rounded-xl border border-[#fecaca] animate-fadeIn">
@@ -430,7 +445,6 @@ export const PortfolioEditor: React.FC<PortfolioEditorProps> = ({
             )
           )}
 
-          {/* Save Button */}
           <button
             id="save-portfolio-btn"
             type="button"
@@ -457,7 +471,6 @@ export const PortfolioEditor: React.FC<PortfolioEditorProps> = ({
         </div>
       </header>
 
-      {/* Prominent Inline Success Notice */}
       {saveSuccessNotice && (
         <div className="bg-[#f0fdf4] border-b border-[#bbf7d0] px-4 py-2.5 text-xs text-[#15803d] flex items-center justify-between shadow-xs transition-all">
           <div className="flex items-center gap-2">
@@ -474,7 +487,6 @@ export const PortfolioEditor: React.FC<PortfolioEditorProps> = ({
         </div>
       )}
 
-      {/* Prominent Inline Error Banner */}
       {errorNotice && (
         <div className="bg-[#fef2f2] border-b border-[#fecaca] px-4 py-2.5 text-xs text-[#dc2626] flex items-center justify-between shadow-xs transition-all">
           <div className="flex items-center gap-2">
@@ -500,13 +512,9 @@ export const PortfolioEditor: React.FC<PortfolioEditorProps> = ({
         </div>
       )}
 
-      {/* Main Workspace Layout */}
-      {/* On desktop (lg breakpoint+): Output and Code side by side */}
-      {/* Below that: stacked with visible tab switcher */}
       <main className="flex-1 overflow-hidden p-2.5 sm:p-4">
         {/* Desktop View (lg+): Side by Side */}
         <div className="hidden lg:grid lg:grid-cols-2 gap-4 h-full">
-          {/* Code Editors Pane */}
           <div className="h-full overflow-hidden flex flex-col">
             <CodeEditorPane
               htmlCode={htmlCode}
@@ -516,14 +524,8 @@ export const PortfolioEditor: React.FC<PortfolioEditorProps> = ({
             />
           </div>
 
-          {/* Live Preview Pane */}
           <div className="h-full overflow-hidden flex flex-col">
-            <LivePreview
-              htmlCode={debouncedHtml}
-              cssCode={debouncedCss}
-              title={title}
-              isThumbnail={false}
-            />
+            <PortfolioPreview html={debouncedHtml} css={debouncedCss} />
           </div>
         </div>
 
@@ -540,12 +542,7 @@ export const PortfolioEditor: React.FC<PortfolioEditorProps> = ({
             </div>
           ) : (
             <div className="h-full overflow-hidden flex flex-col">
-              <LivePreview
-                htmlCode={debouncedHtml}
-                cssCode={debouncedCss}
-                title={title}
-                isThumbnail={false}
-              />
+              <PortfolioPreview html={debouncedHtml} css={debouncedCss} />
             </div>
           )}
         </div>
