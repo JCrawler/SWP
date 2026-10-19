@@ -170,7 +170,7 @@ export const Home: React.FC<HomeProps> = ({
   }, [user, isAdmin, mustChangePassword, fetchProfilesForAdmin, fetchMyPortfolios]);
 
   // Handle Login Onboarding
-// Handle Login Onboarding
+/// Handle Login Onboarding via Direct Database Verification
   const handleLoginSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setAuthError(null);
@@ -183,37 +183,23 @@ export const Home: React.FC<HomeProps> = ({
 
     setAuthLoading(true);
     try {
-      // 1. Look up the user's real email from the public.profiles table using their nickname
-      const { data: profileData, error: profileError } = await supabase
-        .from('profiles')
-        .select('id, nickname')
-        .eq('nickname', cleanNick)
-        .maybeSingle();
-
-      if (profileError || !profileData) {
-        setAuthError('Account not found with that nickname.');
-        setAuthLoading(false);
-        return;
-      }
-
-      // 2. Map nickname to its corresponding auth email
-      const targetEmail = cleanNick === 'admin' ? 'admin@swp.local' : `${cleanNick}@swp.local`;
-
-      // 3. Authenticate with Supabase Auth
-      const { error: authError } = await supabase.auth.signInWithPassword({
-        email: targetEmail,
-        password: loginPassword,
+      // Call our custom PostgreSQL function to verify the nickname & password
+      const { data, error } = await supabase.rpc('login_with_nickname', {
+        p_nickname: cleanNick,
+        p_password: loginPassword,
       });
 
-      if (authError) {
-        setAuthError('Invalid password. Please try again.');
+      if (error || !data || data.length === 0) {
+        setAuthError('Invalid username or password. Please try again.');
         setAuthLoading(false);
         return;
       }
 
+      // If successful, trigger session sync or reload to let useAuth pick up the session
       setLoginNickname('');
       setLoginPassword('');
       onAuthSuccess();
+      window.location.reload(); // Ensures clean session refresh across the app
     } catch (err: any) {
       setAuthError(err?.message || 'Sign in failed. Please check your connection.');
     } finally {
