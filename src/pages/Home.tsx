@@ -170,7 +170,7 @@ export const Home: React.FC<HomeProps> = ({
   }, [user, isAdmin, mustChangePassword, fetchProfilesForAdmin, fetchMyPortfolios]);
 
   // Handle Login Onboarding
-  const handleLoginSubmit = async (e: React.FormEvent) => {
+ const handleLoginSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setAuthError(null);
 
@@ -180,6 +180,33 @@ export const Home: React.FC<HomeProps> = ({
       return;
     }
 
+    setAuthLoading(true);
+    try {
+      // Determine the email format used in Supabase Auth
+      // If logging in as 'admin', use 'admin@swp.local'. Otherwise use '{nickname}@swp.local'
+      const email = cleanNick.includes('@') 
+        ? cleanNick 
+        : `${cleanNick}@swp.local`;
+
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email,
+        password: loginPassword,
+      });
+
+      if (error || !data.user) {
+        setAuthError('Invalid username or password. Please try again.');
+        return;
+      }
+
+      setLoginNickname('');
+      setLoginPassword('');
+      onAuthSuccess();
+    } catch (err: any) {
+      setAuthError(err?.message || 'Sign in failed. Please check your connection.');
+    } finally {
+      setAuthLoading(false);
+    }
+  };
     setAuthLoading(true);
     try {
       const email = cleanNick.includes('@') ? cleanNick : `${cleanNick}@swp.local`;
