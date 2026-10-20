@@ -531,7 +531,7 @@ export const Home: React.FC<HomeProps> = ({
 
         <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8">
           {viewingStudent ? (
-            /* --- VIEWING A SPECIFIC STUDENT'S PORTFOLIOS --- */
+            /* --- VIEWING A SPECIFIC STUDENT'S PORTFOLIOS (READ-ONLY PREVIEW) --- */
             <div className="space-y-6">
               <div className="flex items-center justify-between bg-white p-4 rounded-2xl border border-[#e3e0f5] shadow-xs">
                 <div>
@@ -539,7 +539,7 @@ export const Home: React.FC<HomeProps> = ({
                     <FolderCode className="w-5 h-5 text-[#3e29bd]" />
                     @{viewingStudent.nickname}'s Portfolios
                   </h2>
-                  <p className="text-xs text-[#6b6580] mt-1">Admin preview of this student's websites.</p>
+                  <p className="text-xs text-[#6b6580] mt-1">Admin read-only preview of this student's websites.</p>
                 </div>
                 <button
                   type="button"
@@ -561,12 +561,16 @@ export const Home: React.FC<HomeProps> = ({
               ) : (
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
                   {studentPortfolios.map((portfolio) => (
-                    <PortfolioCard
-                      key={portfolio.id}
-                      portfolio={portfolio}
-                      onEdit={(id) => onNavigate(`/portfolio/${id}`)}
-                      onDelete={handleDeletePortfolio}
-                    />
+                    <div key={portfolio.id} className="relative group">
+                      <PortfolioCard
+                        portfolio={portfolio}
+                        onEdit={(id) => onNavigate(`/portfolio/${id}`)}
+                        onDelete={() => {}} // Disabled for admin safety (read-only view)
+                      />
+                      <div className="absolute top-3 right-3 bg-white/90 backdrop-blur-xs px-2.5 py-1 rounded-lg text-[10px] font-bold text-[#3e29bd] border border-[#e3e0f5] shadow-xs pointer-events-none">
+                        Read-Only Preview
+                      </div>
+                    </div>
                   ))}
                 </div>
               )}
