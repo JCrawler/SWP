@@ -52,6 +52,11 @@ export const Home: React.FC<HomeProps> = ({
   const [confirmNewPassword, setConfirmNewPassword] = useState('');
   const [changingPassword, setChangingPassword] = useState(false);
 
+  // Admin: View Student Portfolios state
+  const [viewingStudent, setViewingStudent] = useState<Profile | null>(null);
+  const [studentPortfolios, setStudentPortfolios] = useState<Portfolio[]>([]);
+  const [loadingStudentPortfolios, setLoadingStudentPortfolios] = useState(false);
+
   // Admin Dashboard state
   const [profiles, setProfiles] = useState<Profile[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
@@ -84,7 +89,6 @@ export const Home: React.FC<HomeProps> = ({
       return;
     }
 
-    // Check local flag or database flags
     const localTempFlag = localStorage.getItem(`swp_temp_reset_${user.nickname.toLowerCase()}`);
 
     try {
@@ -203,6 +207,7 @@ export const Home: React.FC<HomeProps> = ({
       setAuthLoading(false);
     }
   };
+
   // Handle Student Changing Temporary Password
   const handlePasswordChangeSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -228,7 +233,6 @@ export const Home: React.FC<HomeProps> = ({
         return;
       }
 
-      // Clear temporary password flags
       await supabase
         .from('profiles')
         .update({ must_change_password: false } as any)
@@ -257,13 +261,11 @@ export const Home: React.FC<HomeProps> = ({
     const generatedTemp = `Temp_${randomChars}!`;
 
     try {
-      // Attempt RPC or profile table update
       const { error: rpcError } = await supabase.rpc('admin_reset_student_password', {
         target_user_id: student.id,
         new_temp_password: generatedTemp,
       });
 
-      // Mark profile as requiring password change on next login
       await supabase
         .from('profiles')
         .update({ must_change_password: true } as any)
@@ -279,12 +281,12 @@ export const Home: React.FC<HomeProps> = ({
       if (rpcError) {
         setFeedback({
           type: 'info',
-          message: `Temporary password generated for @${student.nickname}. (Note: Ensure the 'admin_reset_student_password' SQL function is enabled in Supabase so the auth password updates in the database).`,
+          message: `Temporary password generated for @${student.nickname}.`,
         });
       } else {
         setFeedback({
           type: 'success',
-          message: `Temporary password generated for @${student.nickname}. They will be prompted to change it upon login.`,
+          message: `Temporary password generated for @${student.nickname}.`,
         });
       }
     } catch (err: any) {
@@ -339,6 +341,29 @@ export const Home: React.FC<HomeProps> = ({
     }
   };
 
+  // Admin: Fetch a specific student's portfolios
+  const handleViewStudentPortfolios = async (student: Profile) => {
+    setViewingStudent(student);
+    setLoadingStudentPortfolios(true);
+    try {
+      const { data, error } = await supabase
+        .from('portfolios')
+        .select('*')
+        .eq('owner_id', student.id)
+        .order('updated_at', { ascending: false });
+
+      if (error) {
+        setFeedback({ type: 'error', message: error.message });
+      } else {
+        setStudentPortfolios(data || []);
+      }
+    } catch (err: any) {
+      setFeedback({ type: 'error', message: err?.message || 'Error loading portfolios' });
+    } finally {
+      setLoadingStudentPortfolios(false);
+    }
+  };
+
   // Handle portfolio deletion
   const handleDeletePortfolio = async (portfolioId: string) => {
     try {
@@ -349,6 +374,7 @@ export const Home: React.FC<HomeProps> = ({
 
       if (!error) {
         setPortfolios((prev) => prev.filter((p) => p.id !== portfolioId));
+        setStudentPortfolios((prev) => prev.filter((p) => p.id !== portfolioId));
         setFeedback({
           type: 'success',
           message: 'Portfolio deleted successfully.',
@@ -468,7 +494,7 @@ export const Home: React.FC<HomeProps> = ({
                   SWP Admin Dashboard
                 </h1>
                 <p className="text-xs text-[#6b6580] mt-1">
-                  Manage student accounts &amp; generate temporary passwords
+                  Manage student accounts &amp; preview portfolios
                 </p>
               </div>
             </div>
@@ -504,136 +530,193 @@ export const Home: React.FC<HomeProps> = ({
         )}
 
         <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8">
-          {/* Register New Student Card */}
-          <div className="bg-white border border-[#e3e0f5] rounded-2xl p-6 shadow-xs">
-            <h2 className="text-sm font-bold text-[#1e1b2e] flex items-center gap-2 mb-4">
-              <UserPlus className="w-4 h-4 text-[#3e29bd]" />
-              <span>Register New Student Account</span>
-            </h2>
-            <form onSubmit={handleCreateStudent} className="flex flex-col sm:flex-row gap-3">
-              <input
-                type="text"
-                placeholder="Student nickname (e.g. alex_code)"
-                value={newStudentNick}
-                onChange={(e) => setNewStudentNick(e.target.value)}
-                className="flex-1 px-3.5 py-2 text-sm bg-[#f8f7fc] border border-[#e3e0f5] rounded-xl outline-none focus:border-[#3e29bd]"
-              />
-              <input
-                type="text"
-                placeholder="Initial temporary password"
-                value={newStudentPass}
-                onChange={(e) => setNewStudentPass(e.target.value)}
-                className="flex-1 px-3.5 py-2 text-sm bg-[#f8f7fc] border border-[#e3e0f5] rounded-xl outline-none focus:border-[#3e29bd]"
-              />
-              <button
-                type="submit"
-                disabled={creatingStudent}
-                className="px-5 py-2 bg-[#3e29bd] hover:bg-[#331f9e] text-white text-xs font-semibold rounded-xl transition-colors shrink-0 disabled:opacity-50"
-              >
-                {creatingStudent ? 'Creating...' : '+ Add Student'}
-              </button>
-            </form>
-          </div>
+          {viewingStudent ? (
+            /* --- VIEWING A SPECIFIC STUDENT'S PORTFOLIOS --- */
+            <div className="space-y-6">
+              <div className="flex items-center justify-between bg-white p-4 rounded-2xl border border-[#e3e0f5] shadow-xs">
+                <div>
+                  <h2 className="text-lg font-bold text-[#1e1b2e] flex items-center gap-2">
+                    <FolderCode className="w-5 h-5 text-[#3e29bd]" />
+                    @{viewingStudent.nickname}'s Portfolios
+                  </h2>
+                  <p className="text-xs text-[#6b6580] mt-1">Admin preview of this student's websites.</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setViewingStudent(null)}
+                  className="px-4 py-2 bg-white border border-[#e3e0f5] text-[#1e1b2e] hover:bg-[#f8f7fc] text-xs font-bold rounded-xl transition-colors"
+                >
+                  ← Back to Students List
+                </button>
+              </div>
 
-          {/* Search & Refresh */}
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-            <div className="w-full sm:max-w-md">
-              <SearchBar
-                value={searchQuery}
-                onChange={setSearchQuery}
-                count={filteredProfiles.length}
-                totalCount={profiles.length}
-              />
+              {loadingStudentPortfolios ? (
+                <div className="text-center py-12 text-sm text-[#6b6580] animate-pulse">
+                  Loading student's websites...
+                </div>
+              ) : studentPortfolios.length === 0 ? (
+                <div className="bg-white border-2 border-dashed border-[#e3e0f5] rounded-3xl p-12 text-center max-w-xl mx-auto shadow-sm">
+                  <p className="text-sm text-[#6b6580]">This student hasn't created any portfolios yet.</p>
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+                  {studentPortfolios.map((portfolio) => (
+                    <PortfolioCard
+                      key={portfolio.id}
+                      portfolio={portfolio}
+                      onEdit={(id) => onNavigate(`/portfolio/${id}`)}
+                      onDelete={handleDeletePortfolio}
+                    />
+                  ))}
+                </div>
+              )}
             </div>
+          ) : (
+            /* --- DEFAULT ADMIN DASHBOARD (Table & Creation Form) --- */
+            <>
+              {/* Register New Student Card */}
+              <div className="bg-white border border-[#e3e0f5] rounded-2xl p-6 shadow-xs">
+                <h2 className="text-sm font-bold text-[#1e1b2e] flex items-center gap-2 mb-4">
+                  <UserPlus className="w-4 h-4 text-[#3e29bd]" />
+                  <span>Register New Student Account</span>
+                </h2>
+                <form onSubmit={handleCreateStudent} className="flex flex-col sm:flex-row gap-3">
+                  <input
+                    type="text"
+                    placeholder="Student nickname (e.g. alex_code)"
+                    value={newStudentNick}
+                    onChange={(e) => setNewStudentNick(e.target.value)}
+                    className="flex-1 px-3.5 py-2 text-sm bg-[#f8f7fc] border border-[#e3e0f5] rounded-xl outline-none focus:border-[#3e29bd]"
+                  />
+                  <input
+                    type="text"
+                    placeholder="Initial temporary password"
+                    value={newStudentPass}
+                    onChange={(e) => setNewStudentPass(e.target.value)}
+                    className="flex-1 px-3.5 py-2 text-sm bg-[#f8f7fc] border border-[#e3e0f5] rounded-xl outline-none focus:border-[#3e29bd]"
+                  />
+                  <button
+                    type="submit"
+                    disabled={creatingStudent}
+                    className="px-5 py-2 bg-[#3e29bd] hover:bg-[#331f9e] text-white text-xs font-semibold rounded-xl transition-colors shrink-0 disabled:opacity-50"
+                  >
+                    {creatingStudent ? 'Creating...' : '+ Add Student'}
+                  </button>
+                </form>
+              </div>
 
-            <button
-              type="button"
-              onClick={fetchProfilesForAdmin}
-              className="inline-flex items-center gap-1.5 text-xs text-[#6b6580] hover:text-[#3e29bd] bg-white px-3 py-2 rounded-xl border border-[#e3e0f5]"
-            >
-              <RefreshCw className={`w-3.5 h-3.5 ${loadingProfiles ? 'animate-spin' : ''}`} />
-              <span>Refresh List</span>
-            </button>
-          </div>
+              {/* Search & Refresh */}
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                <div className="w-full sm:max-w-md">
+                  <SearchBar
+                    value={searchQuery}
+                    onChange={setSearchQuery}
+                    count={filteredProfiles.length}
+                    totalCount={profiles.length}
+                  />
+                </div>
 
-          {/* Students Password Management Table */}
-          <div className="bg-white border border-[#e3e0f5] rounded-2xl overflow-hidden shadow-xs">
-            <table className="w-full text-left border-collapse">
-              <thead>
-                <tr className="bg-[#f8f7fc] border-b border-[#e3e0f5] text-[11px] font-bold text-[#6b6580] uppercase">
-                  <th className="py-3.5 px-6">Student Nickname</th>
-                  <th className="py-3.5 px-6">Generated Temporary Password</th>
-                  <th className="py-3.5 px-6 text-right">Actions</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-[#e3e0f5] text-sm">
-                {loadingProfiles ? (
-                  <tr>
-                    <td colSpan={3} className="py-12 text-center text-xs text-[#6b6580]">
-                      Loading registered students...
-                    </td>
-                  </tr>
-                ) : filteredProfiles.length === 0 ? (
-                  <tr>
-                    <td colSpan={3} className="py-12 text-center text-xs text-[#6b6580]">
-                      No students found.
-                    </td>
-                  </tr>
-                ) : (
-                  filteredProfiles.map((student) => {
-                    const tempPass = tempPasswords[student.id];
-                    return (
-                      <tr key={student.id} className="hover:bg-[#f8f7fc]/60">
-                        <td className="py-4 px-6 font-bold text-[#1e1b2e]">
-                          @{student.nickname}
-                        </td>
-                        <td className="py-4 px-6">
-                          {tempPass ? (
-                            <div className="inline-flex items-center gap-2 bg-[#eeeafd] text-[#3e29bd] px-3 py-1 rounded-lg font-mono text-xs font-bold">
-                              <span>{tempPass}</span>
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  navigator.clipboard.writeText(tempPass);
-                                  setCopiedId(student.id);
-                                  setTimeout(() => setCopiedId(null), 2000);
-                                }}
-                                className="hover:text-[#1e1b2e]"
-                                title="Copy temporary password"
-                              >
-                                {copiedId === student.id ? (
-                                  <Check className="w-3.5 h-3.5 text-[#16a34a]" />
-                                ) : (
-                                  <Copy className="w-3.5 h-3.5" />
-                                )}
-                              </button>
-                            </div>
-                          ) : (
-                            <span className="text-xs text-[#6b6580]">••••••••</span>
-                          )}
-                        </td>
-                        <td className="py-4 px-6 text-right">
-                          <button
-                            type="button"
-                            disabled={resettingId === student.id}
-                            onClick={() => handleGenerateTempPassword(student)}
-                            className="inline-flex items-center gap-1.5 px-3.5 py-1.5 bg-[#3e29bd] hover:bg-[#331f9e] text-white text-xs font-semibold rounded-xl transition-colors disabled:opacity-50"
-                          >
-                            <KeyRound className="w-3.5 h-3.5" />
-                            <span>
-                              {resettingId === student.id
-                                ? 'Generating...'
-                                : 'Reset & Generate Temp Password'}
-                            </span>
-                          </button>
+                <button
+                  type="button"
+                  onClick={fetchProfilesForAdmin}
+                  className="inline-flex items-center gap-1.5 text-xs text-[#6b6580] hover:text-[#3e29bd] bg-white px-3 py-2 rounded-xl border border-[#e3e0f5]"
+                >
+                  <RefreshCw className={`w-3.5 h-3.5 ${loadingProfiles ? 'animate-spin' : ''}`} />
+                  <span>Refresh List</span>
+                </button>
+              </div>
+
+              {/* Students Password Management Table */}
+              <div className="bg-white border border-[#e3e0f5] rounded-2xl overflow-hidden shadow-xs">
+                <table className="w-full text-left border-collapse">
+                  <thead>
+                    <tr className="bg-[#f8f7fc] border-b border-[#e3e0f5] text-[11px] font-bold text-[#6b6580] uppercase">
+                      <th className="py-3.5 px-6">Student Nickname</th>
+                      <th className="py-3.5 px-6">Generated Temporary Password</th>
+                      <th className="py-3.5 px-6 text-right">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-[#e3e0f5] text-sm">
+                    {loadingProfiles ? (
+                      <tr>
+                        <td colSpan={3} className="py-12 text-center text-xs text-[#6b6580]">
+                          Loading registered students...
                         </td>
                       </tr>
-                    );
-                  })
-                )}
-              </tbody>
-            </table>
-          </div>
+                    ) : filteredProfiles.length === 0 ? (
+                      <tr>
+                        <td colSpan={3} className="py-12 text-center text-xs text-[#6b6580]">
+                          No students found.
+                        </td>
+                      </tr>
+                    ) : (
+                      filteredProfiles.map((student) => {
+                        const tempPass = tempPasswords[student.id];
+                        return (
+                          <tr key={student.id} className="hover:bg-[#f8f7fc]/60">
+                            <td className="py-4 px-6 font-bold text-[#1e1b2e]">
+                              @{student.nickname}
+                            </td>
+                            <td className="py-4 px-6">
+                              {tempPass ? (
+                                <div className="inline-flex items-center gap-2 bg-[#eeeafd] text-[#3e29bd] px-3 py-1 rounded-lg font-mono text-xs font-bold">
+                                  <span>{tempPass}</span>
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      navigator.clipboard.writeText(tempPass);
+                                      setCopiedId(student.id);
+                                      setTimeout(() => setCopiedId(null), 2000);
+                                    }}
+                                    className="hover:text-[#1e1b2e]"
+                                    title="Copy temporary password"
+                                  >
+                                    {copiedId === student.id ? (
+                                      <Check className="w-3.5 h-3.5 text-[#16a34a]" />
+                                    ) : (
+                                      <Copy className="w-3.5 h-3.5" />
+                                    )}
+                                  </button>
+                                </div>
+                              ) : (
+                                <span className="text-xs text-[#6b6580]">••••••••</span>
+                              )}
+                            </td>
+                            <td className="py-4 px-6 text-right">
+                              <div className="flex items-center justify-end gap-2">
+                                <button
+                                  type="button"
+                                  onClick={() => handleViewStudentPortfolios(student)}
+                                  className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-[#f0effb] hover:bg-[#e3e0f5] text-[#3e29bd] text-xs font-semibold rounded-xl transition-colors"
+                                >
+                                  <Eye className="w-3.5 h-3.5" />
+                                  <span>View Websites</span>
+                                </button>
+
+                                <button
+                                  type="button"
+                                  disabled={resettingId === student.id}
+                                  onClick={() => handleGenerateTempPassword(student)}
+                                  className="inline-flex items-center gap-1.5 px-3.5 py-1.5 bg-[#3e29bd] hover:bg-[#331f9e] text-white text-xs font-semibold rounded-xl transition-colors disabled:opacity-50"
+                                >
+                                  <KeyRound className="w-3.5 h-3.5" />
+                                  <span>
+                                    {resettingId === student.id
+                                      ? 'Generating...'
+                                      : 'Reset & Generate Temp Password'}
+                                  </span>
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </>
+          )}
         </main>
         <Footer />
       </div>
@@ -800,7 +883,6 @@ export const Home: React.FC<HomeProps> = ({
             </div>
           ) : (
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-              {/* + New Portfolio Tile inside the student's private folder */}
               <div
                 id="add-portfolio-grid-tile"
                 onClick={() => onNavigate('/portfolio/new')}
@@ -838,7 +920,6 @@ export const Home: React.FC<HomeProps> = ({
   /* ------------------------------------------------------------- */
   return (
     <div className="min-h-screen bg-[#f8f7fc] flex flex-col justify-between">
-      {/* Header */}
       <header className="bg-white border-b border-[#e3e0f5]">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-5">
           <div className="flex items-center gap-3">
@@ -855,7 +936,6 @@ export const Home: React.FC<HomeProps> = ({
         </div>
       </header>
 
-      {/* Centralized Login Form (No other students' accounts are visible) */}
       <main className="flex-1 flex items-center justify-center px-4 py-12">
         <div className="bg-white border border-[#e3e0f5] rounded-3xl p-8 w-full max-w-md shadow-sm">
           <div className="text-center mb-6">
