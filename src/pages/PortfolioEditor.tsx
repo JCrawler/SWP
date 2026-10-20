@@ -3,6 +3,7 @@ import { supabase } from '../supabaseClient';
 import { CodeEditorPane } from '../components/CodeEditorPane';
 import { OutputCodeToggle } from '../components/OutputCodeToggle';
 import { SwpLogo } from '../components/SwpLogo';
+import { buildPreviewDocument, PREVIEW_SANDBOX } from '../lib/previewDocument';
 import {
   ArrowLeft,
   Save,
@@ -14,12 +15,14 @@ import {
   Check,
   AlertCircle,
   X,
+  ShieldCheck,
 } from 'lucide-react';
 
 interface PortfolioEditorProps {
-  portfolioId: string | null;
+  portfolioId?: string;
   user: { id: string; email: string; nickname: string } | null;
   onNavigate: (route: string) => void;
+  readOnly?: boolean;
 }
 
 interface PreviewProps {
@@ -28,19 +31,7 @@ interface PreviewProps {
 }
 
 export const PortfolioPreview: React.FC<PreviewProps> = ({ html, css }) => {
-  const fullDocument = `
-    <!DOCTYPE html>
-    <html lang="en">
-      <head>
-        <meta charset="UTF-8" />
-        <base target="_blank" />
-        <style>${css}</style>
-      </head>
-      <body>
-        ${html}
-      </body>
-    </html>
-  `;
+  const fullDocument = useMemo(() => buildPreviewDocument(html, css), [html, css]);
 
   return (
     <div className="w-full h-full flex flex-col bg-white rounded-xl border border-[#e3e0f5] overflow-hidden shadow-sm">
@@ -53,7 +44,7 @@ export const PortfolioPreview: React.FC<PreviewProps> = ({ html, css }) => {
       <iframe
         title="Live Preview"
         srcDoc={fullDocument}
-        sandbox="allow-scripts allow-forms allow-popups allow-modals"
+        sandbox={PREVIEW_SANDBOX}
         className="w-full flex-1 border-none bg-white"
       />
     </div>
@@ -64,6 +55,7 @@ export const PortfolioEditor: React.FC<PortfolioEditorProps> = ({
   portfolioId: initialPortfolioId,
   user,
   onNavigate,
+  readOnly = false,
 }) => {
   const [currentPortfolioId, setCurrentPortfolioId] = useState<string | null>(initialPortfolioId);
   const isNew = !currentPortfolioId || currentPortfolioId === 'new';
@@ -96,12 +88,13 @@ export const PortfolioEditor: React.FC<PortfolioEditorProps> = ({
   const [deleting, setDeleting] = useState(false);
 
   const hasUnsavedChanges = useMemo(() => {
+    if (readOnly) return false;
     return (
       title !== lastSavedSnapshot.title ||
       htmlCode !== lastSavedSnapshot.htmlCode ||
       cssCode !== lastSavedSnapshot.cssCode
     );
-  }, [title, htmlCode, cssCode, lastSavedSnapshot]);
+  }, [title, htmlCode, cssCode, lastSavedSnapshot, readOnly]);
 
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -171,10 +164,7 @@ export const PortfolioEditor: React.FC<PortfolioEditorProps> = ({
   }, [currentPortfolioId, user, onNavigate, loadPortfolio]);
 
   const handleSave = useCallback(async () => {
-    if (!user) {
-      setErrorNotice('You must be logged in to save portfolios.');
-      return;
-    }
+    if (readOnly || !user) return;
 
     setSaving(true);
     setErrorNotice(null);
@@ -257,9 +247,10 @@ export const PortfolioEditor: React.FC<PortfolioEditorProps> = ({
     } finally {
       setSaving(false);
     }
-  }, [user, title, isNew, htmlCode, cssCode, currentPortfolioId]);
+  }, [user, title, isNew, htmlCode, cssCode, currentPortfolioId, readOnly]);
 
   useEffect(() => {
+    if (readOnly) return;
     const handleKeyDown = (e: KeyboardEvent) => {
       if ((e.ctrlKey || e.metaKey) && e.key === 's') {
         e.preventDefault();
@@ -268,10 +259,10 @@ export const PortfolioEditor: React.FC<PortfolioEditorProps> = ({
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [handleSave]);
+  }, [handleSave, readOnly]);
 
   const handleDelete = async () => {
-    if (!currentPortfolioId || isNew) return;
+    if (readOnly || !currentPortfolioId || isNew) return;
     setDeleting(true);
     setErrorNotice(null);
 
@@ -380,95 +371,107 @@ export const PortfolioEditor: React.FC<PortfolioEditorProps> = ({
             <input
               id="portfolio-title-input"
               type="text"
+              readOnly={readOnly}
               value={title}
-              onChange={(e) => setTitle(e.target.value)}
+              onChange={(e) => !readOnly && setTitle(e.target.value)}
               placeholder="webpage project"
-              className="w-full px-2.5 py-1.5 font-bold text-sm sm:text-base text-[#1e1b2e] bg-transparent hover:bg-[#f8f7fc] focus:bg-white border border-transparent hover:border-[#e3e0f5] focus:border-[#3e29bd] rounded-xl transition-all outline-none"
+              className={`w-full px-2.5 py-1.5 font-bold text-sm sm:text-base text-[#1e1b2e] bg-transparent rounded-xl transition-all outline-none ${
+                readOnly ? 'cursor-default' : 'hover:bg-[#f8f7fc] focus:bg-white border border-transparent hover:border-[#e3e0f5] focus:border-[#3e29bd]'
+              }`}
             />
           </div>
 
-          <div className="hidden md:flex items-center gap-1.5 text-[11px] font-medium px-2.5 py-1 rounded-full border">
-            {saving ? (
-              <span className="flex items-center gap-1.5 text-[#3e29bd] border-[#eeeafd] bg-[#eeeafd]/50">
-                <Loader2 className="w-3 h-3 animate-spin" />
-                <span>Saving to Supabase...</span>
-              </span>
-            ) : hasUnsavedChanges ? (
-              <span className="flex items-center gap-1.5 text-amber-700 bg-amber-50 border-amber-200">
-                <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse" />
-                <span>Unsaved changes</span>
-              </span>
-            ) : (
-              <span className="flex items-center gap-1.5 text-[#16a34a] bg-[#f0fdf4] border-[#bbf7d0]">
-                <Check className="w-3 h-3" />
-                <span>All changes saved</span>
-              </span>
-            )}
-          </div>
-        </div>
-
-        <div className="flex items-center gap-2 sm:gap-3 shrink-0">
-          <div className="lg:hidden">
-            <OutputCodeToggle activeView={activeTab} onChange={setActiveTab} />
-          </div>
-
-          {!isNew && (
-            confirmDelete ? (
-              <div className="flex items-center gap-1 bg-[#fef2f2] p-1 rounded-xl border border-[#fecaca] animate-fadeIn">
-                <button
-                  id="confirm-delete-editor-btn"
-                  type="button"
-                  disabled={deleting}
-                  onClick={handleDelete}
-                  className="px-2.5 py-1 text-xs font-semibold bg-[#dc2626] text-white rounded-lg hover:bg-[#b91c1c] transition-colors disabled:opacity-50"
-                >
-                  {deleting ? 'Deleting...' : 'Confirm Delete'}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setConfirmDelete(false)}
-                  className="px-2 py-1 text-xs text-[#6b6580] hover:text-[#1e1b2e]"
-                >
-                  Cancel
-                </button>
-              </div>
-            ) : (
-              <button
-                id="delete-editor-btn"
-                type="button"
-                onClick={() => setConfirmDelete(true)}
-                className="p-2 text-[#6b6580] hover:text-[#dc2626] hover:bg-[#fef2f2] rounded-xl transition-colors"
-                title="Delete Portfolio"
-              >
-                <Trash2 className="w-4 h-4" />
-              </button>
-            )
+          {readOnly ? (
+            <div className="hidden md:flex items-center gap-1.5 text-[11px] font-semibold px-3 py-1 rounded-full bg-[#eeeafd] text-[#3e29bd] border border-[#e3e0f5]">
+              <ShieldCheck className="w-3.5 h-3.5" />
+              <span>Admin Read-Only Preview</span>
+            </div>
+          ) : (
+            <div className="hidden md:flex items-center gap-1.5 text-[11px] font-medium px-2.5 py-1 rounded-full border">
+              {saving ? (
+                <span className="flex items-center gap-1.5 text-[#3e29bd] border-[#eeeafd] bg-[#eeeafd]/50">
+                  <Loader2 className="w-3 h-3 animate-spin" />
+                  <span>Saving to Supabase...</span>
+                </span>
+              ) : hasUnsavedChanges ? (
+                <span className="flex items-center gap-1.5 text-amber-700 bg-amber-50 border-amber-200">
+                  <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse" />
+                  <span>Unsaved changes</span>
+                </span>
+              ) : (
+                <span className="flex items-center gap-1.5 text-[#16a34a] bg-[#f0fdf4] border-[#bbf7d0]">
+                  <Check className="w-3 h-3" />
+                  <span>All changes saved</span>
+                </span>
+              )}
+            </div>
           )}
-
-          <button
-            id="save-portfolio-btn"
-            type="button"
-            disabled={saving}
-            onClick={handleSave}
-            className={`inline-flex items-center gap-1.5 px-3.5 sm:px-4 py-2 text-xs sm:text-sm font-semibold rounded-xl shadow-sm transition-all disabled:opacity-50 ${
-              hasUnsavedChanges
-                ? 'bg-[#3e29bd] hover:bg-[#331f9e] text-white ring-2 ring-[#3e29bd]/20'
-                : 'bg-[#3e29bd] hover:bg-[#331f9e] text-white'
-            }`}
-          >
-            {saving ? (
-              <>
-                <Loader2 className="w-4 h-4 animate-spin" />
-                <span className="hidden xs:inline">Saving...</span>
-              </>
-            ) : (
-              <>
-                <Save className="w-4 h-4" />
-                <span>{isNew ? 'Save' : 'Save Changes'}</span>
-              </>
-            )}
-          </button>
         </div>
+
+        {!readOnly && (
+          <div className="flex items-center gap-2 sm:gap-3 shrink-0">
+            <div className="lg:hidden">
+              <OutputCodeToggle activeView={activeTab} onChange={setActiveTab} />
+            </div>
+
+            {!isNew && (
+              confirmDelete ? (
+                <div className="flex items-center gap-1 bg-[#fef2f2] p-1 rounded-xl border border-[#fecaca] animate-fadeIn">
+                  <button
+                    id="confirm-delete-editor-btn"
+                    type="button"
+                    disabled={deleting}
+                    onClick={handleDelete}
+                    className="px-2.5 py-1 text-xs font-semibold bg-[#dc2626] text-white rounded-lg hover:bg-[#b91c1c] transition-colors disabled:opacity-50"
+                  >
+                    {deleting ? 'Deleting...' : 'Confirm Delete'}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setConfirmDelete(false)}
+                    className="px-2 py-1 text-xs text-[#6b6580] hover:text-[#1e1b2e]"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              ) : (
+                <button
+                  id="delete-editor-btn"
+                  type="button"
+                  onClick={() => setConfirmDelete(true)}
+                  className="p-2 text-[#6b6580] hover:text-[#dc2626] hover:bg-[#fef2f2] rounded-xl transition-colors"
+                  title="Delete Portfolio"
+                >
+                  <Trash2 className="w-4 h-4" />
+                </button>
+              )
+            )}
+
+            <button
+              id="save-portfolio-btn"
+              type="button"
+              disabled={saving}
+              onClick={handleSave}
+              className={`inline-flex items-center gap-1.5 px-3.5 sm:px-4 py-2 text-xs sm:text-sm font-semibold rounded-xl shadow-sm transition-all disabled:opacity-50 ${
+                hasUnsavedChanges
+                  ? 'bg-[#3e29bd] hover:bg-[#331f9e] text-white ring-2 ring-[#3e29bd]/20'
+                  : 'bg-[#3e29bd] hover:bg-[#331f9e] text-white'
+              }`}
+            >
+              {saving ? (
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  <span className="hidden xs:inline">Saving...</span>
+                </>
+              ) : (
+                <>
+                  <Save className="w-4 h-4" />
+                  <span>{isNew ? 'Save' : 'Save Changes'}</span>
+                </>
+              )}
+            </button>
+          </div>
+        )}
       </header>
 
       {saveSuccessNotice && (
@@ -513,39 +516,48 @@ export const PortfolioEditor: React.FC<PortfolioEditorProps> = ({
       )}
 
       <main className="flex-1 overflow-hidden p-2.5 sm:p-4">
-        {/* Desktop View (lg+): Side by Side */}
-        <div className="hidden lg:grid lg:grid-cols-2 gap-4 h-full">
-          <div className="h-full overflow-hidden flex flex-col">
-            <CodeEditorPane
-              htmlCode={htmlCode}
-              cssCode={cssCode}
-              onHtmlChange={setHtmlCode}
-              onCssChange={setCssCode}
-            />
-          </div>
-
+        {readOnly ? (
+          /* Read-Only Mode: Show Full Screen Output Preview */
           <div className="h-full overflow-hidden flex flex-col">
             <PortfolioPreview html={debouncedHtml} css={debouncedCss} />
           </div>
-        </div>
+        ) : (
+          <>
+            {/* Desktop View (lg+): Side by Side */}
+            <div className="hidden lg:grid lg:grid-cols-2 gap-4 h-full">
+              <div className="h-full overflow-hidden flex flex-col">
+                <CodeEditorPane
+                  htmlCode={htmlCode}
+                  cssCode={cssCode}
+                  onHtmlChange={setHtmlCode}
+                  onCssChange={setCssCode}
+                />
+              </div>
 
-        {/* Mobile / Tablet View (<lg): Tab Switched */}
-        <div className="lg:hidden h-full">
-          {activeTab === 'code' ? (
-            <div className="h-full overflow-hidden flex flex-col">
-              <CodeEditorPane
-                htmlCode={htmlCode}
-                cssCode={cssCode}
-                onHtmlChange={setHtmlCode}
-                onCssChange={setCssCode}
-              />
+              <div className="h-full overflow-hidden flex flex-col">
+                <PortfolioPreview html={debouncedHtml} css={debouncedCss} />
+              </div>
             </div>
-          ) : (
-            <div className="h-full overflow-hidden flex flex-col">
-              <PortfolioPreview html={debouncedHtml} css={debouncedCss} />
+
+            {/* Mobile / Tablet View (<lg): Tab Switched */}
+            <div className="lg:hidden h-full">
+              {activeTab === 'code' ? (
+                <div className="h-full overflow-hidden flex flex-col">
+                  <CodeEditorPane
+                    htmlCode={htmlCode}
+                    cssCode={cssCode}
+                    onHtmlChange={setHtmlCode}
+                    onCssChange={setCssCode}
+                  />
+                </div>
+              ) : (
+                <div className="h-full overflow-hidden flex flex-col">
+                  <PortfolioPreview html={debouncedHtml} css={debouncedCss} />
+                </div>
+              )}
             </div>
-          )}
-        </div>
+          </>
+        )}
       </main>
     </div>
   );

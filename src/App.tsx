@@ -2,10 +2,11 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { useAuth } from './hooks/useAuth';
 import { Home } from './pages/Home';
 import { PortfolioEditor } from './pages/PortfolioEditor';
-import { AdminDashboard } from './pages/AdminDashboard';
-import { Loader2, LogOut, SwatchBook } from 'lucide-react';
+import { AdminStudentWorks, AdminViewPortfolio } from './pages/AdminViewer';
+import { Loader2 } from 'lucide-react';
 import { isRealSupabase, supabase } from './supabaseClient';
-import { SwpLogo } from './components/SwpLogo';
+
+type Role = 'admin' | 'student';
 
 export default function App() {
   const { user, loading, signOut, refreshProfile } = useAuth();
@@ -13,32 +14,37 @@ export default function App() {
     return window.location.pathname || '/';
   });
 
-  // Track if user has admin privileges
-  const [isAdmin, setIsAdmin] = useState(false);
+  // Who is this person? The DATABASE decides (never the nickname).
+  // null = still checking.
+  const [role, setRole] = useState<Role | null>(null);
 
   useEffect(() => {
-    const checkAdminRole = async () => {
-      if (!user) {
-        setIsAdmin(false);
-        return;
-      }
-      if (user.nickname.toLowerCase() === 'admin') {
-        setIsAdmin(true);
-        return;
-      }
+    let cancelled = false;
+    if (!user) {
+      setRole(null);
+      return;
+    }
+    setRole(null);
+
+    (async () => {
+      let found: Role = 'student';
       try {
         const { data } = await supabase
           .from('profiles')
           .select('role')
           .eq('id', user.id)
           .single();
-        setIsAdmin((data as any)?.role === 'admin');
+        if ((data as any)?.role === 'admin') found = 'admin';
       } catch {
-        setIsAdmin(false);
+        // If we cannot tell, treat the person as a normal student.
       }
+      if (!cancelled) setRole(found);
+    })();
+
+    return () => {
+      cancelled = true;
     };
-    checkAdminRole();
-  }, [user]);
+  }, [user?.id]);
 
   // Keep state in sync with browser forward/back buttons
   useEffect(() => {
@@ -56,6 +62,30 @@ export default function App() {
     setCurrentPath(route);
   }, []);
 
+  // Which page is being asked for?
+  const adminStudentMatch = currentPath.match(/^\/admin\/student\/([^/]+)\/?$/);
+  const adminViewMatch = currentPath.match(/^\/admin\/view\/([^/]+)\/?$/);
+  const portfolioMatch = currentPath.match(/^\/portfolio\/(.+)$/);
+  const isAdminRoute = Boolean(adminStudentMatch || adminViewMatch);
+
+  // Who is allowed where:
+  //  - logged-out visitors: only the login screen
+  //  - students: their own portfolio folder and editor
+  //  - admin: the dashboard and the view-only pages (never the editor)
+  let redirectTo: string | null = null;
+  if (!loading) {
+    if (!user && (isAdminRoute || portfolioMatch)) {
+      redirectTo = '/';
+    } else if (user && role !== null) {
+      if (isAdminRoute && role !== 'admin') redirectTo = '/';
+      if (portfolioMatch && role === 'admin') redirectTo = '/';
+    }
+  }
+
+  useEffect(() => {
+    if (redirectTo) navigate(redirectTo);
+  }, [redirectTo, navigate]);
+
   // In production, never silently use the fake in-browser database
   if (import.meta.env.PROD && !isRealSupabase) {
     return (
@@ -71,8 +101,8 @@ export default function App() {
     );
   }
 
-  // If loading session initially
-  if (loading) {
+  // Checking the session, or checking the role
+  if (loading || (user && role === null)) {
     return (
       <div className="min-h-screen bg-[#f8f7fc] flex items-center justify-center">
         <div className="flex flex-col items-center gap-3">
@@ -83,73 +113,41 @@ export default function App() {
     );
   }
 
-  // Handle Admin Dashboard Route (/admin)
-  if (currentPath === '/admin') {
-    if (!user || !isAdmin) {
-      // If not logged in as admin, redirect to root login screen
-      navigate('/');
-      return null;
-    }
+  if (redirectTo) return null;
 
+  // Admin: one student's works (titles only)
+  if (adminStudentMatch) {
     return (
-      <div className="min-h-screen bg-[#f8f7fc] flex flex-col">
-        <header className="bg-white border-b border-[#e3e0f5] px-6 py-3.5 flex justify-between items-center shadow-xs">
-          <div className="flex items-center gap-3">
-            <SwpLogo size="sm" />
-            <span className="font-bold text-sm text-[#1e1b2e]">SWP Teacher Administration</span>
-          </div>
-          <div className="flex items-center gap-3">
-            <button
-              onClick={() => navigate('/')}
-              className="text-xs font-semibold text-[#3e29bd] hover:underline"
-            >
-              ← Back to Folders
-            </button>
-            <button
-              onClick={signOut}
-              className="flex items-center gap-1.5 text-xs text-[#dc2626] bg-[#fef2f2] px-3 py-1.5 rounded-xl border border-[#fecaca] font-semibold"
-            >
-              <LogOut className="w-3.5 h-3.5" />
-              <span>Log Out</span>
-            </button>
-          </div>
-        </header>
-        <div className="flex-1">
-          <AdminDashboard />
-        </div>
-      </div>
+      <AdminStudentWorks
+        studentId={decodeURIComponent(adminStudentMatch[1])}
+        onNavigate={navigate}
+        onSignOut={signOut}
+      />
     );
   }
 
-  // Parse path for editor route (e.g. /portfolio/new or /portfolio/:id)
-  const portfolioMatch = currentPath.match(/^\/portfolio\/(.+)$/);
-  const isEditorRoute = Boolean(portfolioMatch);
-  const portfolioId = portfolioMatch ? portfolioMatch[1] : null;
+  // Admin: one page's output (view only, no code)
+  if (adminViewMatch) {
+    return (
+      <AdminViewPortfolio
+        portfolioId={decodeURIComponent(adminViewMatch[1])}
+        onNavigate={navigate}
+      />
+    );
+  }
 
-  // Protect editor route: if not logged in, force to Home "/"
-  if (isEditorRoute) {
-    if (!user) {
-      navigate('/');
-      return (
-        <Home
-          user={null}
-          onSignOut={signOut}
-          onNavigate={navigate}
-          onAuthSuccess={refreshProfile}
-        />
-      );
-    }
-
+  // Student editor (/portfolio/new or /portfolio/:id)
+  if (portfolioMatch && user) {
     return (
       <PortfolioEditor
-        portfolioId={portfolioId}
+        portfolioId={portfolioMatch[1]}
         user={user}
         onNavigate={navigate}
       />
     );
   }
 
-  // Default: Home ("/") — Handles Login, Password Reset, and Student Folder views
+  // Default: Home ("/") - login screen, student folder, or admin dashboard
   return (
     <Home
       user={user}

@@ -98,9 +98,7 @@ export const Home: React.FC<HomeProps> = ({
         .eq('id', user.id)
         .single();
 
-      const adminStatus =
-        user.nickname.toLowerCase() === 'admin' ||
-        (data && (data as any).role === 'admin');
+      const adminStatus = Boolean(data && (data as any).role === 'admin');
 
       setIsAdmin(adminStatus);
 
@@ -110,7 +108,7 @@ export const Home: React.FC<HomeProps> = ({
         setMustChangePassword(false);
       }
     } catch {
-      setIsAdmin(user.nickname.toLowerCase() === 'admin');
+      setIsAdmin(false);
     }
   }, [user]);
 
@@ -342,27 +340,9 @@ export const Home: React.FC<HomeProps> = ({
   };
 
   // Admin: Fetch a specific student's portfolios
-  const handleViewStudentPortfolios = async (student: Profile) => {
-    setViewingStudent(student);
-    setLoadingStudentPortfolios(true);
-    try {
-      const { data, error } = await supabase
-        .from('portfolios')
-        .select('*')
-        .eq('owner_id', student.id)
-        .order('updated_at', { ascending: false });
-
-      if (error) {
-        setFeedback({ type: 'error', message: error.message });
-      } else {
-        setStudentPortfolios(data || []);
-      }
-    } catch (err: any) {
-      setFeedback({ type: 'error', message: err?.message || 'Error loading portfolios' });
-    } finally {
-      setLoadingStudentPortfolios(false);
-    }
-  };
+       const handleViewStudentPortfolios = (student: Profile) => {
+       onNavigate(`/admin/student/${student.id}`);
+     };
 
   // Handle portfolio deletion
   const handleDeletePortfolio = async (portfolioId: string) => {
